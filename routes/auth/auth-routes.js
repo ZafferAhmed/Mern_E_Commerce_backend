@@ -7,6 +7,15 @@ const {
 } = require("../../controllers/auth/auth-controller");
 const router = express.Router();
 
+
+/**
+ * @swagger
+ * tags:
+ *   name: Auth
+ *   description: Authentication APIs
+ */
+
+
 /**
  * @swagger
  * /auth:

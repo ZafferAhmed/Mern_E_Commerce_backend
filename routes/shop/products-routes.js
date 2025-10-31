@@ -3,6 +3,14 @@ const { getFilteredProducts, getProductById } = require("../../controllers/shop/
 const router = express.Router();
 
 
+/** 
+ * @swagger/**
+ * @swagger
+ * tags:
+ *   name: Products
+ *   description: Product management APIs
+ */
+
 /**
  * @swagger
  * /shop/products/getFilteredProducts:

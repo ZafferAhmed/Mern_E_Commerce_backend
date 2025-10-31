@@ -10,6 +10,7 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerSpec = require("./swagger");
 const adminProductsRouter = require("../server/routes/admin/products-routes");
 const ShoppingProductsRouter = require("../server/routes/shop/products-routes")
+const shopCartRouter = require("../server/routes/shop/cart-routes");
 
 mongoose
   .connect(process.env.MONGODB_URI, {})
@@ -30,6 +31,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api/admin/products", adminProductsRouter);
 app.use("/api/shop/products", ShoppingProductsRouter);
+app.use("/api/shop/cart", shopCartRouter);
 
 app.listen(PORT, () => {
   console.log(`server is running on port ${PORT}`);

@@ -1,13 +1,14 @@
+const mongoose = require("mongoose");
 const Cart = require("../../models/Cart");
 const Product = require("../../models/Product");
 
 const formatCartItems = (cart) => {
   return cart.items.map((item) => ({
-    productId: item.productId?._id,
-    image: item.productId?.image,
-    title: item.productId?.title,
-    price: item.productId?.price,
-    salePrice: item.productId?.salePrice,
+    productId: item.productId?._id || null,
+    image: item.productId?.image || null,
+    title: item.productId?.title || "Product not found",
+    price: item.productId?.price || null,
+    salePrice: item.productId?.salePrice || null,
     quantity: item.quantity,
   }));
 };
@@ -23,44 +24,49 @@ const addToCartItem = async (req, res) => {
       });
     }
 
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user ID format" });
     }
 
-    let cart = await Cart.findOne({ userId });
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+    }
+
+    let cart = await Cart.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+    });
+
     if (!cart) cart = new Cart({ userId, items: [] });
 
-    const productIndex = cart.items.findIndex(
+    const index = cart.items.findIndex(
       (item) => item.productId.toString() === productId
     );
 
-    if (productIndex === -1) {
+    if (index === -1) {
       cart.items.push({ productId, quantity });
     } else {
-      cart.items[productIndex].quantity += quantity;
-      if (cart.items[productIndex].quantity <= 0) {
-        cart.items.splice(productIndex, 1);
+      cart.items[index].quantity += quantity;
+      if (cart.items[index].quantity <= 0) {
+        cart.items.splice(index, 1);
       }
     }
 
     await cart.save();
-    await cart.populate({
-      path: "items.productId",
-      select: "image title price salePrice",
-    });
+    await cart.populate("items.productId", "image title price salePrice");
 
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
       message: "Product added to cart successfully",
       data: { ...cart._doc, items: formatCartItems(cart) },
     });
   } catch (error) {
     console.error("Error adding to cart:", error);
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: "Error adding to cart",
       error: error.message,
@@ -71,25 +77,30 @@ const addToCartItem = async (req, res) => {
 const getCartItem = async (req, res) => {
   try {
     const { userId } = req.params;
+
     if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User ID is mandatory!",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "User ID is mandatory!" });
     }
 
-    const cart = await Cart.findOne({ userId }).populate({
-      path: "items.productId",
-      select: "image title price salePrice",
-    });
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user ID format" });
+    }
+
+    const cart = await Cart.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+    }).populate("items.productId", "image title price salePrice");
 
     if (!cart) {
-      return res.status(404).json({
-        success: false,
-        message: "Cart not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart not found" });
     }
 
+    // Filter out deleted products
     const validItems = cart.items.filter((item) => item.productId);
     if (validItems.length !== cart.items.length) {
       cart.items = validItems;
@@ -114,35 +125,42 @@ const getCartItem = async (req, res) => {
 const updateCartItem = async (req, res) => {
   try {
     const { userId, productId, quantity } = req.body;
+
     if (!userId || !productId || quantity <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid request parameters",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid request parameters" });
     }
 
-    const cart = await Cart.findOne({ userId });
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user ID format" });
+    }
+
+    const cart = await Cart.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
+    });
+
     if (!cart) {
-      return res.status(404).json({
-        success: false,
-        message: "Cart not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart not found" });
     }
 
-    const item = cart.items.find((item) => item.productId.toString() === productId);
+    const item = cart.items.find(
+      (item) => item.productId.toString() === productId
+    );
+
     if (!item) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found in cart",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found in cart" });
     }
 
     item.quantity = quantity;
     await cart.save();
-    await cart.populate({
-      path: "items.productId",
-      select: "image title price salePrice",
-    });
+    await cart.populate("items.productId", "image title price salePrice");
 
     res.status(200).json({
       success: true,
@@ -159,30 +177,38 @@ const updateCartItem = async (req, res) => {
   }
 };
 
-const removeFromCart = async (req, res) => {
+const deleteCartItem = async (req, res) => {
   try {
     const { userId, productId } = req.body;
+
     if (!userId || !productId) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid request parameters",
-      });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid request parameters" });
     }
 
-    const cart = await Cart.findOne({ userId });
-    if (!cart) {
-      return res.status(404).json({
-        success: false,
-        message: "Cart not found",
-      });
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid user ID format" });
     }
 
-    cart.items = cart.items.filter((i) => i.productId.toString() !== productId);
-    await cart.save();
-    await cart.populate({
-      path: "items.productId",
-      select: "image title price salePrice",
+    const cart = await Cart.findOne({
+      userId: new mongoose.Types.ObjectId(userId),
     });
+
+    if (!cart) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart not found" });
+    }
+
+    cart.items = cart.items.filter(
+      (item) => item.productId.toString() !== productId
+    );
+
+    await cart.save();
+    await cart.populate("items.productId", "image title price salePrice");
 
     res.status(200).json({
       success: true,
@@ -199,42 +225,9 @@ const removeFromCart = async (req, res) => {
   }
 };
 
-const deleteCartItem = async (req, res) => {
-  try {
-    const { userId } = req.body;
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid request parameters",
-      });
-    }
-
-    const cart = await Cart.findOneAndDelete({ userId });
-    if (!cart) {
-      return res.status(404).json({
-        success: false,
-        message: "Cart not found",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Cart deleted successfully",
-    });
-  } catch (error) {
-    console.error("Error deleting cart:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error deleting cart",
-      error: error.message,
-    });
-  }
-};
-
 module.exports = {
   getCartItem,
   addToCartItem,
-  removeFromCart,
   updateCartItem,
   deleteCartItem,
 };
